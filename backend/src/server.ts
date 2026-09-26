@@ -1,10 +1,8 @@
-import dotenv from "dotenv";
 import app from "./app";
+import { env } from "./config/env";
 
-dotenv.config();
-
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Dhaka Tesla Pool API running on port ${PORT}`);
+app.listen(env.PORT, () => {
+  console.log(
+    `Dhaka Tesla Pool API running on port ${env.PORT} (${env.NODE_ENV})`,
+  );
 });
