@@ -4,6 +4,7 @@ import cors from "cors";
 import authRoutes from "./routes/auth.routes";
 import vehicleRoutes from "./routes/vehicle.routes";
 import rideRoutes from "./routes/ride.routes";
+import poolRoutes from "./routes/pool.routes";
 
 const app = express();
 
@@ -27,5 +28,6 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/rides", rideRoutes);
+app.use("/api/pools", poolRoutes);
 
 export default app;
