@@ -1,4 +1,7 @@
-import { RideStatus } from "@prisma/client";
+import {
+  RideStatus,
+  PoolStatus,
+} from "@prisma/client";
 import { prisma } from "../lib/prisma";
 
 interface CreateRideInput {
@@ -89,9 +92,7 @@ function calculateFare(
 
 export async function createRide(input: CreateRideInput) {
   const passenger = await prisma.user.findUnique({
-    where: {
-      id: input.passengerId,
-    },
+    where: { id: input.passengerId },
   });
 
   if (!passenger) {
@@ -142,15 +143,11 @@ export async function createRide(input: CreateRideInput) {
     });
 
     return tx.rideRequest.findUnique({
-      where: {
-        id: ride.id,
-      },
+      where: { id: ride.id },
       include: {
         fare: true,
         statusHistory: {
-          orderBy: {
-            changedAt: "asc",
-          },
+          orderBy: { changedAt: "asc" },
         },
       },
     });
@@ -159,29 +156,21 @@ export async function createRide(input: CreateRideInput) {
 
 export async function getPassengerRides(passengerId: string) {
   return prisma.rideRequest.findMany({
-    where: {
-      passengerId,
-    },
+    where: { passengerId },
     include: {
       fare: true,
       poolMember: {
         include: {
           pool: {
-            include: {
-              vehicle: true,
-            },
+            include: { vehicle: true },
           },
         },
       },
       statusHistory: {
-        orderBy: {
-          changedAt: "asc",
-        },
+        orderBy: { changedAt: "asc" },
       },
     },
-    orderBy: {
-      requestedAt: "desc",
-    },
+    orderBy: { requestedAt: "desc" },
   });
 }
 
@@ -190,9 +179,7 @@ export async function getRideById(
   passengerId: string,
 ) {
   const ride = await prisma.rideRequest.findUnique({
-    where: {
-      id: rideId,
-    },
+    where: { id: rideId },
     include: {
       fare: true,
       passenger: {
@@ -222,9 +209,7 @@ export async function getRideById(
         },
       },
       statusHistory: {
-        orderBy: {
-          changedAt: "asc",
-        },
+        orderBy: { changedAt: "asc" },
       },
     },
   });
@@ -245,8 +230,13 @@ export async function cancelRide(
   passengerId: string,
 ) {
   const ride = await prisma.rideRequest.findUnique({
-    where: {
-      id: rideId,
+    where: { id: rideId },
+    include: {
+      poolMember: {
+        include: {
+          pool: true,
+        },
+      },
     },
   });
 
@@ -267,14 +257,39 @@ export async function cancelRide(
 
   return prisma.$transaction(async (tx) => {
     const cancelledRide = await tx.rideRequest.update({
-      where: {
-        id: rideId,
-      },
+      where: { id: rideId },
       data: {
         status: RideStatus.CANCELLED,
         cancelledAt: new Date(),
       },
     });
+
+    if (ride.poolMember) {
+      const poolId = ride.poolMember.pool.id;
+
+      await tx.poolMember.delete({
+        where: {
+          rideRequestId: rideId,
+        },
+      });
+
+      const remainingMembers = await tx.poolMember.count({
+        where: {
+          poolId,
+        },
+      });
+
+      if (remainingMembers === 0) {
+        await tx.pool.update({
+          where: {
+            id: poolId,
+          },
+          data: {
+            status: PoolStatus.CANCELLED,
+          },
+        });
+      }
+    }
 
     await tx.rideStatusHistory.create({
       data: {
