@@ -1,10 +1,11 @@
 # Dhaka Tesla Pool
 
-A ride-pooling MVP for Dhaka that matches passenger ride requests to Tesla vehicles while enforcing seat capacity, ride-state transitions, fare calculation, and basic concurrency safety.
+A ride-pooling MVP for Dhaka that matches passenger ride requests to Tesla vehicles while enforcing seat capacity, ride-state transitions, fare calculation, authorization, and basic concurrency safety.
 
 ## Project Status
 
-🚧 Backend MVP implemented  
+🚧 Backend MVP implemented
+
 🚧 Frontend and final documentation in progress
 
 ## Problem
@@ -21,6 +22,7 @@ The MVP focuses on:
 - Ride lifecycle management
 - Ride history
 - Basic authorization and ownership protection
+- Concurrent pool-capacity protection
 
 ## Tech Stack
 
@@ -96,14 +98,22 @@ Invalid state transitions are rejected by the backend.
 
 ## Matching Rule
 
-The MVP uses a simple deterministic matching rule.
+The MVP uses a simple deterministic matching rule designed to demonstrate compatible ride pooling without requiring real map routing.
 
-Two ride requests are considered compatible for the same pool when:
+Two ride requests can join the same open pool when:
 
 1. They use the same pickup zone.
-2. They use the same destination zone.
+2. Their destinations are the same or belong to a predefined compatible destination pair.
 3. The requested seats fit within the Tesla's remaining capacity.
 4. The Tesla is online.
+
+The current compatible destination pairs include:
+
+```text
+Mohakhali ↔ Gulshan
+Gulshan ↔ Badda
+Mohakhali ↔ Badda
+```
 
 For example:
 
@@ -112,14 +122,16 @@ Nusrat:
 Banani → Mohakhali
 
 Rafiq:
-Banani → Mohakhali
+Banani → Gulshan
 ```
 
-These requests can belong to the same pool if capacity is available.
+These requests can belong to the same pool because they share the same pickup zone and their destinations are defined as compatible.
 
-For this MVP, exact pickup and destination zone matching is intentionally used instead of real route calculation.
+This provides the required overlapping-but-not-identical trip example while keeping the matching logic deterministic and easy to test.
 
-Real routing, route overlap percentage, ETA calculation, and geographic optimization are outside the MVP scope.
+For this MVP, predefined zones and compatibility rules are intentionally used instead of real route calculation.
+
+Real routing, route-overlap percentage, ETA calculation, and geographic optimization are outside the MVP scope.
 
 ## Pool Capacity
 
@@ -127,7 +139,7 @@ A Tesla's occupied seats are calculated from its pool members:
 
 ```text
 occupiedSeats =
-sum(seatsAllocated for all active pool members)
+sum(seatsAllocated for all pool members)
 ```
 
 A new ride can only join a pool when:
@@ -138,25 +150,40 @@ occupiedSeats + requestedSeats <= vehicleCapacity
 
 The backend also rejects a request that requires more seats than the Tesla's total capacity.
 
-### Concurrency Safety
+For example, with Bullet's capacity of 3:
+
+```text
+Nusrat = 1 seat
+Rafiq  = 1 seat
+
+Occupied = 2 / 3
+Remaining = 1
+```
+
+A further request requiring 2 seats cannot join that pool.
+
+## Concurrency Safety
 
 Pool matching is executed inside a PostgreSQL transaction using:
 
 - `SERIALIZABLE` transaction isolation
 - Vehicle row locking with `SELECT ... FOR UPDATE`
 
-This prevents concurrent ride requests from incorrectly exceeding the available vehicle capacity.
+The capacity check and pool membership creation happen inside the same transaction.
+
+This prevents concurrent ride requests from incorrectly consuming the same remaining vehicle capacity.
 
 The backend includes an automated concurrency test covering simultaneous pool-matching requests.
 
-For a larger distributed production system, additional database locking/queueing and horizontally scalable coordination could be considered.
+For a larger distributed production system, additional database locking, queueing, and horizontally scalable coordination could be considered.
 
 ## Fare Calculation
 
 The MVP uses a simple fare model:
 
 ```text
-passengerFare = baseFare + distanceCharge - poolDiscount
+passengerFare =
+baseFare + distanceCharge - poolDiscount
 ```
 
 Current implementation:
@@ -164,15 +191,16 @@ Current implementation:
 ```text
 baseFare = 50
 distanceRate = 20 per km
-poolDiscount = 0
+poolDiscount = 20% of the pre-discount fare when the ride is pooled
 ```
 
 The estimated distance is based on predefined Dhaka zone pairs.
 
-Example:
+Example before pooling:
 
 ```text
 Banani → Mohakhali
+
 Estimated distance = 3 km
 
 base fare = 50
@@ -181,6 +209,16 @@ distance charge = 3 × 20 = 60
 1-seat fare = 110
 2-seat fare = 220
 ```
+
+When a ride becomes part of a pool:
+
+```text
+Pre-discount fare = 110
+Pool discount = 22
+Final fare = 88
+```
+
+When a second passenger joins an existing pool, the pool discount is applied to all members of that pool.
 
 The database stores monetary values as integer `BigInt` values rather than floating-point decimal values.
 
@@ -250,6 +288,14 @@ GET  /api/rides/:id
 POST /api/rides/:id/cancel
 ```
 
+### Pool Operations
+
+```text
+POST /api/pools/rides/:rideId/match
+```
+
+The pool matching endpoint applies the deterministic compatibility rule and enforces vehicle capacity.
+
 ## Testing
 
 Automated backend tests currently cover:
@@ -257,6 +303,7 @@ Automated backend tests currently cover:
 - Ride ownership protection
 - Unauthorized ride cancellation
 - Fare calculation
+- Multiple-seat fare calculation
 - Invalid driver ride-state transitions
 - Pool capacity enforcement
 - Concurrent pool matching
@@ -323,6 +370,26 @@ npm run prisma:generate
 npm run prisma:migrate
 ```
 
+### Seed Demo Data
+
+```bash
+npx prisma db seed
+```
+
+The seed creates:
+
+- Jashim — Driver
+- Bullet — Tesla Model 3
+- Nusrat — Passenger
+- Rafiq — Passenger
+- Shirin — Passenger
+
+The demo password for the seeded accounts is:
+
+```text
+12345678
+```
+
 ### Start Development Server
 
 ```bash
@@ -341,17 +408,44 @@ Health check:
 GET /api/health
 ```
 
-## Seed / Demo Data
+## Demo Flow
 
-The final demo dataset is intended to include:
+The backend can demonstrate the required pooling scenario using the seeded users.
 
-- Jashim — Driver
-- Bullet — Tesla
-- Nusrat — Passenger
-- Rafiq — Passenger
-- Shirin — Passenger
+Example:
 
-The dataset will be used to demonstrate ride requests, pooling, capacity enforcement, fare calculation, and the ride lifecycle.
+```text
+Jashim
+  └── Bullet
+      └── Capacity: 3
+
+Nusrat
+  └── Banani → Mohakhali
+      └── 1 seat
+
+Rafiq
+  └── Banani → Gulshan
+      └── 1 seat
+```
+
+Both rides can be matched into the same pool:
+
+```text
+Bullet Pool
+├── Nusrat — 1 seat — fare 88
+└── Rafiq  — 1 seat — fare 88
+
+Occupied: 2 / 3
+Remaining: 1
+```
+
+This demonstrates:
+
+- Overlapping but non-identical trips
+- Pool membership
+- Individual passenger fares
+- Pool discount
+- Capacity enforcement
 
 ## Architecture
 
@@ -373,7 +467,7 @@ PostgreSQL
 
 Business rules such as matching, capacity checks, fare calculation, ownership checks, and ride-state transitions are kept primarily inside the service layer rather than route handlers.
 
-Architecture and ERD diagrams will be added under:
+Architecture and ERD diagrams are maintained under:
 
 ```text
 docs/
@@ -383,11 +477,11 @@ docs/
 
 AI tools may be used during development for:
 
-- debugging
-- code review
-- test generation
-- documentation assistance
-- identifying edge cases
+- Debugging
+- Code review
+- Test generation
+- Documentation assistance
+- Identifying edge cases
 
 All generated code is reviewed, tested, and adapted before being included in the project.
 
@@ -402,8 +496,10 @@ AI is not used as a replacement for application-level validation, database const
 - Driver availability
 - Vehicle capacity
 - Ride matching
+- Compatible route pooling
 - Pool membership
 - Fare calculation
+- Pool discounts
 - Ride lifecycle
 - Cancellation
 - Ride history
