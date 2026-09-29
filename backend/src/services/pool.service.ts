@@ -4,16 +4,96 @@ import {
 } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 
+const POOL_DISCOUNT_RATE = 0.2;
+
+function areCompatibleRoutes(
+  firstPickup: string,
+  firstDestination: string,
+  secondPickup: string,
+  secondDestination: string,
+) {
+  // MVP matching rule:
+  // same pickup zone + different but nearby Dhaka destinations
+  // are considered compatible for pooling.
+  if (firstPickup !== secondPickup) {
+    return false;
+  }
+
+  if (firstDestination === secondDestination) {
+    return true;
+  }
+
+  const compatibleDestinations = new Set([
+    ["Mohakhali", "Gulshan"].sort().join("-"),
+    ["Gulshan", "Badda"].sort().join("-"),
+    ["Mohakhali", "Badda"].sort().join("-"),
+  ]);
+
+  return compatibleDestinations.has(
+    [firstDestination, secondDestination]
+      .sort()
+      .join("-"),
+  );
+}
+
+async function applyPoolDiscount(
+  tx: Parameters<typeof prisma.$transaction>[0] extends (
+    arg: infer T,
+  ) => unknown
+    ? T
+    : never,
+  poolId: string,
+) {
+  const members = await tx.poolMember.findMany({
+    where: {
+      poolId,
+    },
+    include: {
+      rideRequest: {
+        include: {
+          fare: true,
+        },
+      },
+    },
+  });
+
+  for (const member of members) {
+    const fare = member.rideRequest.fare;
+
+    if (!fare) {
+      continue;
+    }
+
+    const subtotal =
+      fare.baseFare + fare.distanceCharge;
+
+    const poolDiscount = BigInt(
+      Math.round(
+        Number(subtotal) * POOL_DISCOUNT_RATE,
+      ),
+    );
+
+    const totalFare = subtotal - poolDiscount;
+
+    await tx.fare.update({
+      where: {
+        rideRequestId: member.rideRequestId,
+      },
+      data: {
+        poolDiscount,
+        totalFare,
+      },
+    });
+  }
+}
+
 export async function matchRideToPool(
   rideRequestId: string,
 ) {
   return prisma.$transaction(
     async (tx) => {
-      // 1. Get the requested ride
       const ride = await tx.rideRequest.findUnique({
-        where: {
-          id: rideRequestId,
-        },
+        where: { id: rideRequestId },
       });
 
       if (!ride) {
@@ -24,22 +104,15 @@ export async function matchRideToPool(
         throw new Error("RIDE_NOT_REQUESTED");
       }
 
-      // 2. Find an online vehicle
       const vehicle = await tx.vehicle.findFirst({
-        where: {
-          isOnline: true,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
+        where: { isOnline: true },
+        orderBy: { createdAt: "asc" },
       });
 
       if (!vehicle) {
         throw new Error("NO_ONLINE_VEHICLE");
       }
 
-      // Lock the vehicle row for the duration of this transaction.
-      // This helps prevent concurrent matching from overbooking capacity.
       await tx.$queryRaw`
         SELECT id
         FROM vehicles
@@ -47,18 +120,18 @@ export async function matchRideToPool(
         FOR UPDATE
       `;
 
-      // Re-read the vehicle after acquiring the lock.
       const lockedVehicle = await tx.vehicle.findUnique({
-        where: {
-          id: vehicle.id,
-        },
+        where: { id: vehicle.id },
       });
 
       if (!lockedVehicle || !lockedVehicle.isOnline) {
         throw new Error("VEHICLE_NOT_AVAILABLE");
       }
 
-      // 3. Look for an existing OPEN pool for this vehicle
+      if (ride.seatsRequested > lockedVehicle.capacity) {
+        throw new Error("INSUFFICIENT_VEHICLE_CAPACITY");
+      }
+
       const openPools = await tx.pool.findMany({
         where: {
           vehicleId: lockedVehicle.id,
@@ -76,12 +149,9 @@ export async function matchRideToPool(
             },
           },
         },
-        orderBy: {
-          createdAt: "asc",
-        },
+        orderBy: { createdAt: "asc" },
       });
 
-      // 4. Find a pool with the same route and enough capacity
       for (const pool of openPools) {
         const firstMember = pool.members[0];
 
@@ -89,12 +159,14 @@ export async function matchRideToPool(
           continue;
         }
 
-        const sameRoute =
-          firstMember.rideRequest.pickupZone === ride.pickupZone &&
-          firstMember.rideRequest.destinationZone ===
-            ride.destinationZone;
+        const compatible = areCompatibleRoutes(
+          firstMember.rideRequest.pickupZone,
+          firstMember.rideRequest.destinationZone,
+          ride.pickupZone,
+          ride.destinationZone,
+        );
 
-        if (!sameRoute) {
+        if (!compatible) {
           continue;
         }
 
@@ -111,7 +183,6 @@ export async function matchRideToPool(
           continue;
         }
 
-        // Add ride to the existing pool
         await tx.poolMember.create({
           data: {
             poolId: pool.id,
@@ -120,17 +191,11 @@ export async function matchRideToPool(
           },
         });
 
-        // Change ride status
         await tx.rideRequest.update({
-          where: {
-            id: ride.id,
-          },
-          data: {
-            status: RideStatus.MATCHED,
-          },
+          where: { id: ride.id },
+          data: { status: RideStatus.MATCHED },
         });
 
-        // Record status change
         await tx.rideStatusHistory.create({
           data: {
             rideRequestId: ride.id,
@@ -139,18 +204,18 @@ export async function matchRideToPool(
           },
         });
 
+        // Once a second passenger joins, all pool members
+        // receive the pool discount.
+        await applyPoolDiscount(tx, pool.id);
+
         return tx.pool.findUnique({
-          where: {
-            id: pool.id,
-          },
+          where: { id: pool.id },
           include: {
             vehicle: true,
             members: {
               include: {
                 rideRequest: {
-                  include: {
-                    fare: true,
-                  },
+                  include: { fare: true },
                 },
               },
             },
@@ -158,20 +223,12 @@ export async function matchRideToPool(
         });
       }
 
-      // 5. No suitable existing pool.
-      // Don't create a second OPEN pool for the same vehicle.
       const hasOpenPool = openPools.length > 0;
 
       if (hasOpenPool) {
         throw new Error("NO_MATCHING_POOL_CAPACITY");
       }
 
-      // 6. Make sure this ride itself fits in the vehicle
-      if (ride.seatsRequested > lockedVehicle.capacity) {
-        throw new Error("INSUFFICIENT_VEHICLE_CAPACITY");
-      }
-
-      // 7. Create a new pool
       const pool = await tx.pool.create({
         data: {
           vehicleId: lockedVehicle.id,
@@ -179,7 +236,6 @@ export async function matchRideToPool(
         },
       });
 
-      // 8. Add the ride to the new pool
       await tx.poolMember.create({
         data: {
           poolId: pool.id,
@@ -188,17 +244,11 @@ export async function matchRideToPool(
         },
       });
 
-      // 9. Change ride status
       await tx.rideRequest.update({
-        where: {
-          id: ride.id,
-        },
-        data: {
-          status: RideStatus.MATCHED,
-        },
+        where: { id: ride.id },
+        data: { status: RideStatus.MATCHED },
       });
 
-      // 10. Record status change
       await tx.rideStatusHistory.create({
         data: {
           rideRequestId: ride.id,
@@ -208,17 +258,13 @@ export async function matchRideToPool(
       });
 
       return tx.pool.findUnique({
-        where: {
-          id: pool.id,
-        },
+        where: { id: pool.id },
         include: {
           vehicle: true,
           members: {
             include: {
               rideRequest: {
-                include: {
-                  fare: true,
-                },
+                include: { fare: true },
               },
             },
           },
