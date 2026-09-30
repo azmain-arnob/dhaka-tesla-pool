@@ -20,43 +20,50 @@ const DISTANCE_RATE = 20;
 const POOL_DISCOUNT_RATE = 0.2;
 
 const ZONE_DISTANCE_KM: Record<string, number> = {
-  "Banani-Mohakhali": 3,
-  "Banani-Gulshan": 3,
-  "Banani-Badda": 5,
-  "Banani-Mirpur": 9,
-  "Banani-Uttara": 12,
-  "Gulshan-Badda": 4,
-  "Gulshan-Mohakhali": 4,
-  "Gulshan-Mirpur": 10,
-  "Gulshan-Uttara": 14,
-  "Mohakhali-Mirpur": 8,
-  "Mohakhali-Uttara": 11,
-  "Badda-Mirpur": 9,
-  "Badda-Uttara": 13,
-  "Mirpur-Uttara": 8,
+  "banani-mohakhali": 3,
+  "banani-gulshan": 3,
+  "banani-badda": 5,
+  "banani-mirpur": 9,
+  "banani-uttara": 12,
+  "gulshan-badda": 4,
+  "gulshan-mohakhali": 4,
+  "gulshan-mirpur": 10,
+  "gulshan-uttara": 14,
+  "mohakhali-mirpur": 8,
+  "mohakhali-uttara": 11,
+  "badda-mirpur": 9,
+  "badda-uttara": 13,
+  "mirpur-uttara": 8,
 };
 
+function normalizeZone(zone: string) {
+  return zone.trim().toLowerCase();
+}
+
 function getDistanceKey(a: string, b: string) {
-  return `${a}-${b}`;
+  return `${normalizeZone(a)}-${normalizeZone(b)}`;
 }
 
 function estimateDistanceKm(
   pickupZone: string,
   destinationZone: string,
 ): number {
-  if (pickupZone === destinationZone) {
+  const pickup = normalizeZone(pickupZone);
+  const destination = normalizeZone(destinationZone);
+
+  if (pickup === destination) {
     return 2;
   }
 
   const direct =
-    ZONE_DISTANCE_KM[getDistanceKey(pickupZone, destinationZone)];
+    ZONE_DISTANCE_KM[getDistanceKey(pickup, destination)];
 
   if (direct !== undefined) {
     return direct;
   }
 
   const reverse =
-    ZONE_DISTANCE_KM[getDistanceKey(destinationZone, pickupZone)];
+    ZONE_DISTANCE_KM[getDistanceKey(destination, pickup)];
 
   if (reverse !== undefined) {
     return reverse;

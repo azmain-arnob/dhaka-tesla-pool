@@ -8,6 +8,15 @@ const initialRideForm = {
   seatsRequested: 1,
 }
 
+const DHAKA_ZONES = [
+  'Banani',
+  'Mohakhali',
+  'Gulshan',
+  'Badda',
+  'Mirpur',
+  'Uttara',
+]
+
 const initialRegisterForm = {
   name: '',
   email: '',
@@ -169,7 +178,10 @@ function App() {
     <div className="app">
       <nav className="navbar">
         <div className="container navbar-inner">
-          <button className="brand brand-button" onClick={() => window.scrollTo(0, 0)}>
+          <button
+            className="brand brand-button"
+            onClick={() => window.scrollTo(0, 0)}
+          >
             <div className="brand-icon">D</div>
             <span>Dhaka Tesla Pool</span>
           </button>
@@ -177,9 +189,11 @@ function App() {
           <div className="nav-links">
             <a href="#how-it-works">How It Works</a>
             <a href="#about">About</a>
+
             <button className="nav-login" onClick={openLogin}>
               Log In
             </button>
+
             <button className="nav-signup" onClick={openRegister}>
               Sign Up
             </button>
@@ -216,24 +230,15 @@ function App() {
               <div className="popular-routes">
                 <span>Popular routes:</span>
 
-                <button
-                  onClick={openLogin}
-                  type="button"
-                >
+                <button onClick={openLogin} type="button">
                   Banani → Mohakhali
                 </button>
 
-                <button
-                  onClick={openLogin}
-                  type="button"
-                >
+                <button onClick={openLogin} type="button">
                   Gulshan → Badda
                 </button>
 
-                <button
-                  onClick={openLogin}
-                  type="button"
-                >
+                <button onClick={openLogin} type="button">
                   Mohakhali → Banani
                 </button>
               </div>
@@ -241,7 +246,8 @@ function App() {
               <div className="backend-status">
                 <span
                   className={
-                    backendStatus === 'Dhaka Tesla Pool API is running'
+                    backendStatus ===
+                    'Dhaka Tesla Pool API is running'
                       ? 'status-dot online'
                       : 'status-dot'
                   }
@@ -292,7 +298,7 @@ function App() {
         <section className="stats-section">
           <div className="container stats">
             <div>
-              <strong>4+</strong>
+              <strong>6</strong>
               <span>Dhaka zones</span>
             </div>
 
@@ -337,7 +343,7 @@ function App() {
                 <h3>Request a ride</h3>
 
                 <p>
-                  Enter your pickup location, destination, and preferred
+                  Select your pickup location, destination, and preferred
                   travel details.
                 </p>
               </div>
@@ -451,12 +457,20 @@ function QuickRideForm({ onLoginRequired }) {
 
         <div className="field-content">
           <label>Pickup</label>
-          <input
-            type="text"
-            placeholder="e.g. Banani"
+
+          <select
             value={pickupZone}
             onChange={(event) => setPickupZone(event.target.value)}
-          />
+            required
+          >
+            <option value="">Select pickup zone</option>
+
+            {DHAKA_ZONES.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -467,12 +481,22 @@ function QuickRideForm({ onLoginRequired }) {
 
         <div className="field-content">
           <label>Destination</label>
-          <input
-            type="text"
-            placeholder="e.g. Mohakhali"
+
+          <select
             value={destinationZone}
-            onChange={(event) => setDestinationZone(event.target.value)}
-          />
+            onChange={(event) =>
+              setDestinationZone(event.target.value)
+            }
+            required
+          >
+            <option value="">Select destination zone</option>
+
+            {DHAKA_ZONES.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -530,6 +554,7 @@ function AuthModal({
           <form onSubmit={onLogin} className="auth-form">
             <label>
               Email
+
               <input
                 type="email"
                 required
@@ -546,6 +571,7 @@ function AuthModal({
 
             <label>
               Password
+
               <input
                 type="password"
                 required
@@ -570,6 +596,7 @@ function AuthModal({
 
             <div className="auth-switch">
               Don't have an account?
+
               <button
                 type="button"
                 onClick={() => setMode('register')}
@@ -582,6 +609,7 @@ function AuthModal({
           <form onSubmit={onRegister} className="auth-form">
             <label>
               Name
+
               <input
                 type="text"
                 required
@@ -599,6 +627,7 @@ function AuthModal({
 
             <label>
               Email
+
               <input
                 type="email"
                 required
@@ -615,6 +644,7 @@ function AuthModal({
 
             <label>
               Password
+
               <input
                 type="password"
                 required
@@ -632,6 +662,7 @@ function AuthModal({
 
             <label>
               Account type
+
               <select
                 value={registerForm.role}
                 onChange={(event) =>
@@ -658,6 +689,7 @@ function AuthModal({
 
             <div className="auth-switch">
               Already have an account?
+
               <button
                 type="button"
                 onClick={() => setMode('login')}
@@ -717,6 +749,7 @@ function Dashboard({
             <span className="eyebrow">
               {user.role === 'DRIVER' ? 'DRIVER' : 'PASSENGER'}
             </span>
+
             <h2>
               {user.role === 'DRIVER'
                 ? 'Driver Center'
@@ -801,14 +834,20 @@ function Dashboard({
           {notice && (
             <div className="dashboard-alert success">
               {notice}
-              <button onClick={() => setNotice('')}>×</button>
+
+              <button onClick={() => setNotice('')}>
+                ×
+              </button>
             </div>
           )}
 
           {error && (
             <div className="dashboard-alert error">
               {error}
-              <button onClick={() => setError('')}>×</button>
+
+              <button onClick={() => setError('')}>
+                ×
+              </button>
             </div>
           )}
 
@@ -930,6 +969,7 @@ function PassengerDashboard({
 
           <div className="metric-card">
             <span>Active Requests</span>
+
             <strong>
               {
                 rides.filter(
@@ -944,6 +984,7 @@ function PassengerDashboard({
 
           <div className="metric-card">
             <span>Completed</span>
+
             <strong>
               {
                 rides.filter(
@@ -959,6 +1000,7 @@ function PassengerDashboard({
         <div className="content-card-header">
           <div>
             <span className="eyebrow">RIDE REQUESTS</span>
+
             <h2>
               {activeView === 'rides'
                 ? 'Your ride history'
@@ -1006,12 +1048,25 @@ function PassengerRideRequest({ onCreated, setError }) {
     event.preventDefault()
 
     setError('')
+
+    if (!form.pickupZone || !form.destinationZone) {
+      setError('Please select both pickup and destination zones.')
+      return
+    }
+
+    if (form.pickupZone === form.destinationZone) {
+      setError(
+        'Pickup and destination cannot be the same zone.',
+      )
+      return
+    }
+
     setLoading(true)
 
     try {
       await api.post('/api/rides', {
-        pickupZone: form.pickupZone.trim(),
-        destinationZone: form.destinationZone.trim(),
+        pickupZone: form.pickupZone,
+        destinationZone: form.destinationZone,
         seatsRequested: Number(form.seatsRequested),
       })
 
@@ -1029,9 +1084,11 @@ function PassengerRideRequest({ onCreated, setError }) {
       <div className="dashboard-heading">
         <div>
           <span className="eyebrow">NEW REQUEST</span>
+
           <h1>Request a ride</h1>
+
           <p>
-            Enter your route and number of seats required.
+            Select your route and number of seats required.
           </p>
         </div>
       </div>
@@ -1040,10 +1097,9 @@ function PassengerRideRequest({ onCreated, setError }) {
         <form onSubmit={submitRide} className="dashboard-form">
           <label>
             Pickup zone
-            <input
+
+            <select
               required
-              minLength="2"
-              maxLength="100"
               value={form.pickupZone}
               onChange={(event) =>
                 setForm({
@@ -1051,16 +1107,24 @@ function PassengerRideRequest({ onCreated, setError }) {
                   pickupZone: event.target.value,
                 })
               }
-              placeholder="e.g. Banani"
-            />
+            >
+              <option value="">
+                Select pickup zone
+              </option>
+
+              {DHAKA_ZONES.map((zone) => (
+                <option key={zone} value={zone}>
+                  {zone}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label>
             Destination zone
-            <input
+
+            <select
               required
-              minLength="2"
-              maxLength="100"
               value={form.destinationZone}
               onChange={(event) =>
                 setForm({
@@ -1068,12 +1132,22 @@ function PassengerRideRequest({ onCreated, setError }) {
                   destinationZone: event.target.value,
                 })
               }
-              placeholder="e.g. Mohakhali"
-            />
+            >
+              <option value="">
+                Select destination zone
+              </option>
+
+              {DHAKA_ZONES.map((zone) => (
+                <option key={zone} value={zone}>
+                  {zone}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label>
             Seats requested
+
             <input
               type="number"
               min="1"
@@ -1091,6 +1165,7 @@ function PassengerRideRequest({ onCreated, setError }) {
 
           <div className="form-note">
             <strong>How matching works</strong>
+
             <p>
               This creates a ride request in the backend. A compatible
               driver/pool can then accept or match the request.
@@ -1102,7 +1177,9 @@ function PassengerRideRequest({ onCreated, setError }) {
             type="submit"
             disabled={loading}
           >
-            {loading ? 'Creating request...' : 'Create Ride Request'}
+            {loading
+              ? 'Creating request...'
+              : 'Create Ride Request'}
           </button>
         </form>
       </div>
@@ -1138,6 +1215,12 @@ function PassengerRideCard({ ride, onCancel }) {
             {ride.seatsRequested} seat
             {ride.seatsRequested === 1 ? '' : 's'}
           </span>
+
+          {ride.fare && (
+            <span>
+              Fare: ৳{Number(ride.fare.totalFare)}
+            </span>
+          )}
 
           {ride.createdAt && (
             <span>
@@ -1187,7 +1270,11 @@ function DriverDashboard({
       const data = await api.get('/api/vehicles/me')
       setVehicle(data.data.vehicle)
     } catch (err) {
-      if (!err.message.toLowerCase().includes('vehicle not found')) {
+      if (
+        !err.message
+          .toLowerCase()
+          .includes('vehicle not found')
+      ) {
         setError(err.message)
       }
 
@@ -1217,9 +1304,12 @@ function DriverDashboard({
 
   async function updateVehicleStatus(isOnline) {
     try {
-      const data = await api.patch('/api/vehicles/me/status', {
-        isOnline,
-      })
+      const data = await api.patch(
+        '/api/vehicles/me/status',
+        {
+          isOnline,
+        },
+      )
 
       setVehicle(data.data.vehicle)
 
@@ -1266,11 +1356,11 @@ function DriverDashboard({
         onAccept={async (rideId) => {
           try {
             const data = await api.post(
-              `/api/drivers/rides/${rideId}/accept`,
+              `/api/pools/rides/${rideId}/match`,
             )
 
             setNotice(
-              data.message || 'Ride accepted successfully.',
+              data.message || 'Ride matched successfully.',
             )
 
             await loadRequests()
@@ -1294,7 +1384,9 @@ function DriverDashboard({
               `/api/drivers/rides/${rideId}/${action}`,
             )
 
-            setNotice(data.message || 'Ride updated successfully.')
+            setNotice(
+              data.message || 'Ride updated successfully.',
+            )
 
             await loadDriverRides()
             await loadRequests()
@@ -1327,7 +1419,9 @@ function DriverDashboard({
       <div className="dashboard-heading">
         <div>
           <span className="eyebrow">DRIVER</span>
+
           <h1>Driver Center</h1>
+
           <p>
             Manage your vehicle, requests, and active rides.
           </p>
@@ -1344,6 +1438,7 @@ function DriverDashboard({
       <div className="dashboard-cards">
         <div className="metric-card">
           <span>Vehicle</span>
+
           <strong>
             {vehicleLoading
               ? '...'
@@ -1375,7 +1470,9 @@ function DriverDashboard({
             {vehicle && (
               <StatusBadge
                 status={
-                  vehicle.isOnline ? 'ONLINE' : 'OFFLINE'
+                  vehicle.isOnline
+                    ? 'ONLINE'
+                    : 'OFFLINE'
                 }
               />
             )}
@@ -1385,6 +1482,7 @@ function DriverDashboard({
             <div className="vehicle-summary">
               <strong>{vehicle.name}</strong>
               <span>{vehicle.model}</span>
+
               <span>
                 Capacity: {vehicle.capacity} seats
               </span>
@@ -1393,14 +1491,18 @@ function DriverDashboard({
                 {vehicle.isOnline ? (
                   <button
                     className="secondary-button"
-                    onClick={() => updateVehicleStatus(false)}
+                    onClick={() =>
+                      updateVehicleStatus(false)
+                    }
                   >
                     Go Offline
                   </button>
                 ) : (
                   <button
                     className="primary-button"
-                    onClick={() => updateVehicleStatus(true)}
+                    onClick={() =>
+                      updateVehicleStatus(true)
+                    }
                   >
                     Go Online
                   </button>
@@ -1411,7 +1513,9 @@ function DriverDashboard({
             <EmptyState
               text="Create your vehicle before accepting rides."
               actionText="Set up vehicle"
-              onAction={() => setActiveView('vehicle')}
+              onAction={() =>
+                setActiveView('vehicle')
+              }
             />
           )}
         </div>
@@ -1425,7 +1529,9 @@ function DriverDashboard({
 
             <button
               className="secondary-button"
-              onClick={() => setActiveView('requests')}
+              onClick={() =>
+                setActiveView('requests')
+              }
             >
               View all
             </button>
@@ -1436,14 +1542,21 @@ function DriverDashboard({
           ) : (
             <div className="mini-list">
               {requests.slice(0, 3).map((ride) => (
-                <div className="mini-list-item" key={ride.id}>
+                <div
+                  className="mini-list-item"
+                  key={ride.id}
+                >
                   <div>
                     <strong>
-                      {ride.pickupZone} → {ride.destinationZone}
+                      {ride.pickupZone} →{' '}
+                      {ride.destinationZone}
                     </strong>
+
                     <span>
                       {ride.seatsRequested} seat
-                      {ride.seatsRequested === 1 ? '' : 's'}
+                      {ride.seatsRequested === 1
+                        ? ''
+                        : 's'}
                     </span>
                   </div>
 
@@ -1512,7 +1625,9 @@ function DriverVehicle({
       <div className="dashboard-heading">
         <div>
           <span className="eyebrow">VEHICLE</span>
+
           <h1>My Vehicle</h1>
+
           <p>
             Register the Tesla you use for shared rides.
           </p>
@@ -1525,16 +1640,25 @@ function DriverVehicle({
             <div className="vehicle-icon">🚗</div>
 
             <div className="vehicle-detail-info">
-              <span className="eyebrow">REGISTERED VEHICLE</span>
+              <span className="eyebrow">
+                REGISTERED VEHICLE
+              </span>
+
               <h2>{vehicle.name}</h2>
+
               <p>{vehicle.model}</p>
+
               <span>
                 Capacity: {vehicle.capacity} passengers
               </span>
             </div>
 
             <StatusBadge
-              status={vehicle.isOnline ? 'ONLINE' : 'OFFLINE'}
+              status={
+                vehicle.isOnline
+                  ? 'ONLINE'
+                  : 'OFFLINE'
+              }
             />
           </div>
 
@@ -1542,14 +1666,18 @@ function DriverVehicle({
             {vehicle.isOnline ? (
               <button
                 className="secondary-button"
-                onClick={() => onStatusChange(false)}
+                onClick={() =>
+                  onStatusChange(false)
+                }
               >
                 Set Offline
               </button>
             ) : (
               <button
                 className="primary-button"
-                onClick={() => onStatusChange(true)}
+                onClick={() =>
+                  onStatusChange(true)
+                }
               >
                 Set Online
               </button>
@@ -1560,16 +1688,22 @@ function DriverVehicle({
         <div className="content-card form-card">
           <div className="form-intro">
             <span className="eyebrow">FIRST STEP</span>
+
             <h2>Register your vehicle</h2>
+
             <p>
               You need a vehicle before the backend can make you
               available for ride matching.
             </p>
           </div>
 
-          <form onSubmit={createVehicle} className="dashboard-form">
+          <form
+            onSubmit={createVehicle}
+            className="dashboard-form"
+          >
             <label>
               Vehicle name
+
               <input
                 required
                 minLength="2"
@@ -1587,6 +1721,7 @@ function DriverVehicle({
 
             <label>
               Model
+
               <input
                 required
                 minLength="2"
@@ -1604,6 +1739,7 @@ function DriverVehicle({
 
             <label>
               Passenger capacity
+
               <input
                 type="number"
                 required
@@ -1645,7 +1781,9 @@ function DriverRequests({
       <div className="dashboard-heading">
         <div>
           <span className="eyebrow">DRIVER</span>
+
           <h1>Ride Requests</h1>
+
           <p>
             Review passenger requests available to your vehicle.
           </p>
@@ -1665,18 +1803,26 @@ function DriverRequests({
         ) : (
           <div className="ride-list">
             {requests.map((ride) => (
-              <div className="ride-card" key={ride.id}>
+              <div
+                className="ride-card"
+                key={ride.id}
+              >
                 <div className="ride-card-main">
                   <div className="route-summary">
                     <div>
                       <span>Pickup</span>
-                      <strong>{ride.pickupZone}</strong>
+                      <strong>
+                        {ride.pickupZone}
+                      </strong>
                     </div>
 
-                    <div className="route-arrow">→</div>
+                    <div className="route-arrow">
+                      →
+                    </div>
 
                     <div>
                       <span>Destination</span>
+
                       <strong>
                         {ride.destinationZone}
                       </strong>
@@ -1694,14 +1840,18 @@ function DriverRequests({
                 </div>
 
                 <div className="ride-card-side">
-                  <StatusBadge status={ride.status} />
+                  <StatusBadge
+                    status={ride.status}
+                  />
 
                   {ride.status === 'REQUESTED' && (
                     <button
                       className="primary-button compact"
-                      onClick={() => onAccept(ride.id)}
+                      onClick={() =>
+                        onAccept(ride.id)
+                      }
                     >
-                      Accept
+                      Match Pool
                     </button>
                   )}
                 </div>
@@ -1725,7 +1875,9 @@ function DriverRides({
       <div className="dashboard-heading">
         <div>
           <span className="eyebrow">DRIVER</span>
+
           <h1>My Rides</h1>
+
           <p>
             Manage the lifecycle of your assigned rides.
           </p>
@@ -1773,7 +1925,8 @@ function DriverRideCard({
           <span className="eyebrow">RIDE</span>
 
           <h3>
-            {ride.pickupZone} → {ride.destinationZone}
+            {ride.pickupZone} →{' '}
+            {ride.destinationZone}
           </h3>
         </div>
 
@@ -1805,7 +1958,9 @@ function DriverRideCard({
         {status === 'MATCHED' && (
           <button
             className="primary-button"
-            onClick={() => onAction(ride.id, 'arrive')}
+            onClick={() =>
+              onAction(ride.id, 'arrive')
+            }
           >
             Mark Arrived
           </button>
@@ -1814,16 +1969,20 @@ function DriverRideCard({
         {status === 'DRIVER_ARRIVED' && (
           <button
             className="primary-button"
-            onClick={() => onAction(ride.id, 'start')}
+            onClick={() =>
+              onAction(ride.id, 'start')
+            }
           >
             Start Ride
           </button>
         )}
 
-        {status === 'IN_PROGRESS' && (
+        {status === 'STARTED' && (
           <button
             className="primary-button"
-            onClick={() => onAction(ride.id, 'complete')}
+            onClick={() =>
+              onAction(ride.id, 'complete')
+            }
           >
             Complete Ride
           </button>
@@ -1837,7 +1996,9 @@ function StatusBadge({ status }) {
   const label = String(status || 'UNKNOWN')
     .replaceAll('_', ' ')
     .toLowerCase()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .replace(/\b\w/g, (letter) =>
+      letter.toUpperCase(),
+    )
 
   const normalized = String(status || '').toLowerCase()
 
@@ -1878,6 +2039,7 @@ function EmptyState({
   return (
     <div className="empty-state">
       <div className="empty-icon">⌁</div>
+
       <p>{text}</p>
 
       {actionText && (
