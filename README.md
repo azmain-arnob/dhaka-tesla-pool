@@ -2,6 +2,8 @@
 
 A ride-sharing and ride-pooling system designed for Tesla rides within Dhaka.
 
+Demo Video: https://www.youtube.com/watch?v=aJNT9cexQuU
+
 ## Project Status
 
 **Version:** `v1.0.0`
