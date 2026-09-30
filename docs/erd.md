@@ -1,5 +1,9 @@
 # Dhaka Tesla Pool — ERD
 
+The following entity relationship diagram represents the current PostgreSQL database schema used by the MVP.
+
+## Entity Relationship Diagram
+
 ```mermaid
 erDiagram
 
@@ -9,24 +13,23 @@ erDiagram
     POOLS ||--o{ POOL_MEMBERS : contains
     RIDE_REQUESTS ||--o| POOL_MEMBERS : joins
     RIDE_REQUESTS ||--o{ RIDE_STATUS_HISTORY : has
-    USERS ||--o{ RIDE_STATUS_HISTORY : changes
     RIDE_REQUESTS ||--|| FARES : has
 
     USERS {
-        string id PK
+        uuid id PK
         string name
         string email UK
         string password_hash
         string role
-        boolean is_active
         datetime created_at
         datetime updated_at
     }
 
     VEHICLES {
-        string id PK
-        string driver_id FK
+        uuid id PK
+        uuid driver_id FK
         string name
+        string model
         int capacity
         boolean is_online
         datetime created_at
@@ -34,23 +37,25 @@ erDiagram
     }
 
     RIDE_REQUESTS {
-        string id PK
-        string passenger_id FK
+        uuid id PK
+        uuid passenger_id FK
         string pickup_zone
         string destination_zone
-        float pickup_lat
-        float pickup_lng
-        float destination_lat
-        float destination_lng
-        int requested_seats
+        decimal pickup_lat
+        decimal pickup_lng
+        decimal destination_lat
+        decimal destination_lng
+        int seats_requested
         string status
-        datetime created_at
+        datetime requested_at
         datetime updated_at
+        datetime cancelled_at
+        datetime completed_at
     }
 
     POOLS {
-        string id PK
-        string vehicle_id FK
+        uuid id PK
+        uuid vehicle_id FK
         string status
         datetime started_at
         datetime completed_at
@@ -59,41 +64,28 @@ erDiagram
     }
 
     POOL_MEMBERS {
-        string id PK
-        string pool_id FK
-        string ride_request_id FK
-        int seats
+        uuid id PK
+        uuid pool_id FK
+        uuid ride_request_id FK
+        int seats_allocated
         datetime joined_at
     }
 
     RIDE_STATUS_HISTORY {
-        string id PK
-        string ride_request_id FK
-        string changed_by FK
-        string from_status
-        string to_status
-        datetime created_at
+        uuid id PK
+        uuid ride_request_id FK
+        string status
+        datetime changed_at
+        string note
     }
 
     FARES {
-        string id PK
-        string ride_request_id FK
-        int base_fare
-        int distance_charge
-        int pool_discount
-        int total_fare
-        string currency
+        uuid id PK
+        uuid ride_request_id FK
+        bigint base_fare
+        bigint distance_charge
+        bigint pool_discount
+        bigint total_fare
         datetime created_at
+        datetime updated_at
     }
-```
-
-## Relationship Summary
-
-- One driver owns one vehicle in the MVP.
-- One passenger can create many ride requests.
-- One vehicle can operate many pools over time.
-- One pool contains multiple pool members.
-- One ride request can belong to at most one pool.
-- One ride request has a status history.
-- One user can perform multiple status changes.
-- One ride request has one fare record.
