@@ -7,6 +7,7 @@ import {
   it,
 } from "vitest";
 import {
+  PoolStatus,
   RideStatus,
   UserRole,
 } from "@prisma/client";
@@ -29,6 +30,7 @@ let vehicleId = "";
 
 const passengerIds: string[] = [];
 const rideIds: string[] = [];
+const poolIds: string[] = [];
 
 const originalVehicleStatuses = new Map<
   string,
@@ -64,6 +66,55 @@ async function createRide(passengerId: string) {
   rideIds.push(ride.id);
 
   return ride;
+}
+
+async function cleanupTestData() {
+  if (rideIds.length > 0) {
+    await prisma.poolMember.deleteMany({
+      where: {
+        rideRequestId: {
+          in: rideIds,
+        },
+      },
+    });
+
+    await prisma.rideStatusHistory.deleteMany({
+      where: {
+        rideRequestId: {
+          in: rideIds,
+        },
+      },
+    });
+
+    await prisma.fare.deleteMany({
+      where: {
+        rideRequestId: {
+          in: rideIds,
+        },
+      },
+    });
+
+    await prisma.rideRequest.deleteMany({
+      where: {
+        id: {
+          in: rideIds,
+        },
+      },
+    });
+  }
+
+  if (poolIds.length > 0) {
+    await prisma.pool.deleteMany({
+      where: {
+        id: {
+          in: poolIds,
+        },
+      },
+    });
+  }
+
+  rideIds.length = 0;
+  poolIds.length = 0;
 }
 
 beforeAll(async () => {
@@ -112,47 +163,77 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  await prisma.poolMember.deleteMany({
-    where: {
-      pool: {
-        vehicleId,
+  await cleanupTestData();
+});
+
+describe("Pooled fare calculation", () => {
+  it("applies the pool discount to both Nusrat and Rafiq", async () => {
+    const nusrat = await createPassenger(
+      `nusrat-${suffix}@test.com`,
+    );
+
+    const rafiq = await createPassenger(
+      `rafiq-${suffix}@test.com`,
+    );
+
+    const nusratRide = await createRide(nusrat.id);
+    const rafiqRide = await createRide(rafiq.id);
+
+    await prisma.fare.create({
+      data: {
+        rideRequestId: nusratRide.id,
+        baseFare: 50n,
+        distanceCharge: 60n,
+        poolDiscount: 0n,
+        totalFare: 110n,
       },
-    },
-  });
+    });
 
-  await prisma.pool.deleteMany({
-    where: {
-      vehicleId,
-    },
-  });
+    await prisma.fare.create({
+      data: {
+        rideRequestId: rafiqRide.id,
+        baseFare: 50n,
+        distanceCharge: 60n,
+        poolDiscount: 0n,
+        totalFare: 110n,
+      },
+    });
 
-  if (rideIds.length > 0) {
-    await prisma.rideStatusHistory.deleteMany({
+    const firstPool = await matchRideToPool(
+      nusratRide.id,
+    );
+
+    expect(firstPool).toBeTruthy();
+
+    if (!firstPool) {
+      return;
+    }
+
+    poolIds.push(firstPool.id);
+
+    const secondPool = await matchRideToPool(
+      rafiqRide.id,
+    );
+
+    expect(secondPool).toBeTruthy();
+
+    const fares = await prisma.fare.findMany({
       where: {
         rideRequestId: {
-          in: rideIds,
+          in: [nusratRide.id, rafiqRide.id],
         },
       },
     });
 
-    await prisma.fare.deleteMany({
-      where: {
-        rideRequestId: {
-          in: rideIds,
-        },
-      },
-    });
+    expect(fares).toHaveLength(2);
 
-    await prisma.rideRequest.deleteMany({
-      where: {
-        id: {
-          in: rideIds,
-        },
-      },
-    });
-  }
-
-  rideIds.length = 0;
+    for (const fare of fares) {
+      expect(fare.baseFare).toBe(50n);
+      expect(fare.distanceCharge).toBe(60n);
+      expect(fare.poolDiscount).toBe(22n);
+      expect(fare.totalFare).toBe(88n);
+    }
+  });
 });
 
 describe("Pool capacity and concurrency", () => {
@@ -173,6 +254,12 @@ describe("Pool capacity and concurrency", () => {
 
     expect(firstPool).toBeTruthy();
 
+    if (!firstPool) {
+      return;
+    }
+
+    poolIds.push(firstPool.id);
+
     await matchRideToPool(rides[1].id);
     await matchRideToPool(rides[2].id);
 
@@ -182,9 +269,7 @@ describe("Pool capacity and concurrency", () => {
 
     const members = await prisma.poolMember.findMany({
       where: {
-        pool: {
-          vehicleId,
-        },
+        poolId: firstPool.id,
       },
     });
 
@@ -219,6 +304,19 @@ describe("Pool capacity and concurrency", () => {
       (result) => result.status === "fulfilled",
     );
 
+    const pools = await prisma.pool.findMany({
+      where: {
+        vehicleId,
+      },
+      include: {
+        members: true,
+      },
+    });
+
+    for (const pool of pools) {
+      poolIds.push(pool.id);
+    }
+
     expect(successful.length).toBeGreaterThanOrEqual(1);
     expect(successful.length).toBeLessThanOrEqual(2);
 
@@ -242,45 +340,7 @@ describe("Pool capacity and concurrency", () => {
 });
 
 afterAll(async () => {
-  await prisma.poolMember.deleteMany({
-    where: {
-      pool: {
-        vehicleId,
-      },
-    },
-  });
-
-  await prisma.pool.deleteMany({
-    where: {
-      vehicleId,
-    },
-  });
-
-  if (rideIds.length > 0) {
-    await prisma.rideStatusHistory.deleteMany({
-      where: {
-        rideRequestId: {
-          in: rideIds,
-        },
-      },
-    });
-
-    await prisma.fare.deleteMany({
-      where: {
-        rideRequestId: {
-          in: rideIds,
-        },
-      },
-    });
-
-    await prisma.rideRequest.deleteMany({
-      where: {
-        id: {
-          in: rideIds,
-        },
-      },
-    });
-  }
+  await cleanupTestData();
 
   if (vehicleId) {
     await prisma.vehicle.delete({
