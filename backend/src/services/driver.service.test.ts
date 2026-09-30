@@ -95,6 +95,7 @@ describe("Driver ride state transitions", () => {
 });
 
 afterAll(async () => {
+  // Delete dependent records before their parent records.
   if (rideId) {
     await prisma.rideStatusHistory.deleteMany({
       where: {
@@ -114,15 +115,23 @@ afterAll(async () => {
       },
     });
 
-    await prisma.rideRequest.delete({
+    await prisma.rideRequest.deleteMany({
       where: {
         id: rideId,
       },
     });
   }
 
+  // Defensive cleanup in case pool members remain because of
+  // a partial test failure or an interrupted previous run.
   if (poolId) {
-    await prisma.pool.delete({
+    await prisma.poolMember.deleteMany({
+      where: {
+        poolId,
+      },
+    });
+
+    await prisma.pool.deleteMany({
       where: {
         id: poolId,
       },
@@ -130,7 +139,7 @@ afterAll(async () => {
   }
 
   if (vehicleId) {
-    await prisma.vehicle.delete({
+    await prisma.vehicle.deleteMany({
       where: {
         id: vehicleId,
       },
@@ -138,7 +147,7 @@ afterAll(async () => {
   }
 
   if (passengerId) {
-    await prisma.user.delete({
+    await prisma.user.deleteMany({
       where: {
         id: passengerId,
       },
@@ -146,7 +155,7 @@ afterAll(async () => {
   }
 
   if (driverId) {
-    await prisma.user.delete({
+    await prisma.user.deleteMany({
       where: {
         id: driverId,
       },

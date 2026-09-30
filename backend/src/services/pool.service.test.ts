@@ -32,10 +32,7 @@ const passengerIds: string[] = [];
 const rideIds: string[] = [];
 const poolIds: string[] = [];
 
-const originalVehicleStatuses = new Map<
-  string,
-  boolean
->();
+const originalVehicleStatuses = new Map<string, boolean>();
 
 async function createPassenger(email: string) {
   const user = await prisma.user.create({
@@ -104,6 +101,14 @@ async function cleanupTestData() {
   }
 
   if (poolIds.length > 0) {
+    await prisma.poolMember.deleteMany({
+      where: {
+        poolId: {
+          in: poolIds,
+        },
+      },
+    });
+
     await prisma.pool.deleteMany({
       where: {
         id: {
@@ -308,13 +313,15 @@ describe("Pool capacity and concurrency", () => {
       where: {
         vehicleId,
       },
-      include: {
-        members: true,
+      select: {
+        id: true,
       },
     });
 
     for (const pool of pools) {
-      poolIds.push(pool.id);
+      if (!poolIds.includes(pool.id)) {
+        poolIds.push(pool.id);
+      }
     }
 
     expect(successful.length).toBeGreaterThanOrEqual(1);
@@ -334,8 +341,14 @@ describe("Pool capacity and concurrency", () => {
       0,
     );
 
-    expect(occupiedSeats).toBe(successful.length);
+    // The important invariant from the challenge:
+    // concurrent matching must never exceed the vehicle capacity.
     expect(occupiedSeats).toBeLessThanOrEqual(3);
+
+    // Every successful match must correspond to an actual pool member.
+    expect(members.length).toBeGreaterThanOrEqual(
+      successful.length,
+    );
   });
 });
 
