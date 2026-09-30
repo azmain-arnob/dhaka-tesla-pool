@@ -1,78 +1,90 @@
 # Dhaka Tesla Pool
 
-A ride-pooling MVP for Dhaka that matches passenger ride requests to Tesla vehicles while enforcing seat capacity, ride-state transitions, fare calculation, authorization, and basic concurrency safety.
+A ride-sharing and ride-pooling system designed for Tesla rides within Dhaka.
 
 ## Project Status
 
-🚧 Backend MVP implemented
+**Version:** `v1.0.0`
 
-🚧 Frontend and final documentation in progress
+The core MVP flow has been implemented and tested:
+
+- Passenger registration and login
+- Driver login
+- Ride request creation
+- Fare calculation
+- Driver ride request management
+- Pool matching
+- Pool capacity protection
+- Multiple passengers in the same Tesla
+- Individual passenger fares
+- Ride lifecycle management
+- Passenger ride history
+- Driver ride history
+- Ride cancellation
+- Database transactions for pool matching
+- Automated backend tests
+- Docker setup with PostgreSQL
+
+---
 
 ## Problem
 
-Dhaka passengers travelling through overlapping routes may be able to share a Tesla instead of using separate rides.
+The goal of this project is to demonstrate a simple ride-sharing system where multiple passengers can share a Tesla when their ride requests can be handled by the same vehicle.
 
-The MVP focuses on:
+The system needs to keep track of:
 
-- Passenger ride requests
-- Driver/Tesla availability
-- Ride matching and pooling
-- Seat-capacity enforcement
-- Individual passenger fares
-- Ride lifecycle management
-- Ride history
-- Basic authorization and ownership protection
-- Concurrent pool-capacity protection
+- Passengers
+- Drivers
+- Vehicles
+- Ride requests
+- Pools
+- Pool members
+- Fares
+- Ride status history
 
-## Tech Stack
+A major requirement is preventing a Tesla from accepting more passengers than its available capacity.
 
-### Backend
+---
 
-- Node.js
-- Express.js
-- TypeScript
-- PostgreSQL
-- Prisma ORM
-- JWT authentication
-- Zod validation
-- Vitest
-- Supertest
+## Main Features
 
-### Frontend
+### Passenger
 
-- React / Next.js
-- In progress
+- Register and log in
+- Request a ride
+- Select pickup and destination
+- Select number of seats
+- See estimated fare
+- Cancel valid rides
+- View ride history
+- See ride status
 
-### Infrastructure
+### Driver
 
-- Docker / Docker Compose
-- `.env` based configuration
-- Free and open-source tooling
+- Log in
+- Set vehicle online/offline
+- View ride requests
+- Match a ride into a pool
+- View assigned rides
+- Mark driver as arrived
+- Start a ride
+- Complete a ride
+- View ride history
 
-## Core Domain Model
+### Ride Pooling
 
-The main database entities are:
+- Multiple passengers can share the same Tesla
+- Each passenger keeps an individual ride record
+- Pool membership is stored in the database
+- Tesla capacity is checked before matching
+- A full pool cannot accept additional seats
+- Pooled rides can receive the applicable fare adjustment
 
-- `User`
-- `Vehicle`
-- `RideRequest`
-- `Pool`
-- `PoolMember`
-- `RideStatusHistory`
-- `Fare`
-
-### Relationships
-
-- A driver can own one Tesla/vehicle.
-- A passenger can create multiple ride requests.
-- A vehicle can operate multiple pools over time.
-- A pool contains multiple ride requests through `PoolMember`.
-- Each ride request has one individual fare.
-- Each ride request keeps a status history.
+---
 
 ## Ride Lifecycle
 
-Passenger ride lifecycle:
+The implemented ride lifecycle is:
 
 ```text
 REQUESTED
@@ -86,450 +98,721 @@ STARTED
 COMPLETED
 ```
 
-A ride can also be cancelled while it is in a cancellable state:
+Cancellation is also supported where the current ride state allows it.
+
+---
+
+## Example
+
+A simplified example:
 
 ```text
-REQUESTED / MATCHED
-        ↓
-    CANCELLED
+Passenger 1
+Banani → Mohakhali
+1 seat
+
+Passenger 2
+Banani → Mohakhali
+1 seat
+
+Passenger 3
+Banani → Mohakhali
+1 seat
 ```
 
-Invalid state transitions are rejected by the backend.
+If the Tesla has enough available capacity, these rides can be matched into the same pool.
 
-## Matching Rule
+The system keeps each passenger's ride and fare separately while storing their pool membership.
 
-The MVP uses a simple deterministic matching rule designed to demonstrate compatible ride pooling without requiring real map routing.
+---
 
-Two ride requests can join the same open pool when:
+## Capacity Protection
 
-1. They use the same pickup zone.
-2. Their destinations are the same or belong to a predefined compatible destination pair.
-3. The requested seats fit within the Tesla's remaining capacity.
-4. The Tesla is online.
+Capacity is checked when a ride is matched.
 
-The current compatible destination pairs include:
-
-```text
-Mohakhali ↔ Gulshan
-Gulshan ↔ Badda
-Mohakhali ↔ Badda
-```
+The pool matching logic uses database transactions and row locking to reduce the chance of two simultaneous requests consuming the same remaining seat.
 
 For example:
 
 ```text
-Nusrat:
-Banani → Mohakhali
+Tesla capacity: 3
 
-Rafiq:
-Banani → Gulshan
+Passenger 1 → 1 seat
+Passenger 2 → 1 seat
+Passenger 3 → 1 seat
+
+Available seats: 0
+
+Passenger 4 → 1 seat
+Result: rejected
 ```
 
-These requests can belong to the same pool because they share the same pickup zone and their destinations are defined as compatible.
+The system also checks capacity again inside the transaction before creating the pool membership.
 
-This provides the required overlapping-but-not-identical trip example while keeping the matching logic deterministic and easy to test.
-
-For this MVP, predefined zones and compatibility rules are intentionally used instead of real route calculation.
-
-Real routing, route-overlap percentage, ETA calculation, and geographic optimization are outside the MVP scope.
-
-## Pool Capacity
-
-A Tesla's occupied seats are calculated from its pool members:
-
-```text
-occupiedSeats =
-sum(seatsAllocated for all pool members)
-```
-
-A new ride can only join a pool when:
-
-```text
-occupiedSeats + requestedSeats <= vehicleCapacity
-```
-
-The backend also rejects a request that requires more seats than the Tesla's total capacity.
-
-For example, with Bullet's capacity of 3:
-
-```text
-Nusrat = 1 seat
-Rafiq  = 1 seat
-
-Occupied = 2 / 3
-Remaining = 1
-```
-
-A further request requiring 2 seats cannot join that pool.
-
-## Concurrency Safety
-
-Pool matching is executed inside a PostgreSQL transaction using:
-
-- `SERIALIZABLE` transaction isolation
-- Vehicle row locking with `SELECT ... FOR UPDATE`
-
-The capacity check and pool membership creation happen inside the same transaction.
-
-This prevents concurrent ride requests from incorrectly consuming the same remaining vehicle capacity.
-
-The backend includes an automated concurrency test covering simultaneous pool-matching requests.
-
-For a larger distributed production system, additional database locking, queueing, and horizontally scalable coordination could be considered.
+---
 
 ## Fare Calculation
 
-The MVP uses a simple fare model:
+The current implementation uses a simple predefined fare model based on the selected pickup and destination zones.
+
+Current zones include:
 
 ```text
-passengerFare =
-baseFare + distanceCharge - poolDiscount
+Banani
+Mohakhali
+Gulshan
+Badda
+Mirpur
+Uttara
 ```
 
-Current implementation:
+The frontend currently uses these zones for ride selection.
 
-```text
-baseFare = 50
-distanceRate = 20 per km
-poolDiscount = 20% of the pre-discount fare when the ride is pooled
-```
+The fare is calculated by the backend and returned with the ride information.
 
-The estimated distance is based on predefined Dhaka zone pairs.
+---
 
-Example before pooling:
+## Technology Stack
 
-```text
-Banani → Mohakhali
+### Frontend
 
-Estimated distance = 3 km
+- React
+- Vite
+- JavaScript
+- CSS
 
-base fare = 50
-distance charge = 3 × 20 = 60
-
-1-seat fare = 110
-2-seat fare = 220
-```
-
-When a ride becomes part of a pool:
-
-```text
-Pre-discount fare = 110
-Pool discount = 22
-Final fare = 88
-```
-
-When a second passenger joins an existing pool, the pool discount is applied to all members of that pool.
-
-The database stores monetary values as integer `BigInt` values rather than floating-point decimal values.
-
-For this MVP, the values are treated as integer fare units. A production implementation can explicitly define these units as Bangladeshi poysha.
-
-No payment gateway is required for this MVP.
-
-## Authentication & Authorization
-
-The backend uses JWT authentication.
-
-Protected resources require a valid access token.
-
-Role-based authorization is applied to driver and passenger resources.
-
-Examples:
-
-- Passengers can create and manage their own ride requests.
-- Drivers can access driver request and ride resources.
-- A passenger cannot view or cancel another passenger's ride.
-- A driver cannot update a ride belonging to another driver's vehicle.
-
-## Validation
-
-Request payloads are validated using Zod.
-
-Examples include:
-
-- Ride seat count
-- Pickup and destination zones
-- Latitude/longitude ranges
-- Vehicle capacity
-- Vehicle online/offline status
-- Ride IDs
-
-Invalid requests return appropriate HTTP errors.
-
-## API Areas
-
-Current backend API areas include:
-
-```text
-/api/auth
-/api/vehicles
-/api/rides
-/api/pools
-/api/drivers
-```
-
-### Driver Operations
-
-```text
-GET  /api/drivers/requests
-GET  /api/drivers/rides
-POST /api/drivers/rides/:rideId/accept
-POST /api/drivers/rides/:rideId/arrive
-POST /api/drivers/rides/:rideId/start
-POST /api/drivers/rides/:rideId/complete
-```
-
-### Passenger Ride Operations
-
-```text
-POST /api/rides
-GET  /api/rides
-GET  /api/rides/:id
-POST /api/rides/:id/cancel
-```
-
-### Pool Operations
-
-```text
-POST /api/pools/rides/:rideId/match
-```
-
-The pool matching endpoint applies the deterministic compatibility rule and enforces vehicle capacity.
-
-## Testing
-
-Automated backend tests currently cover:
-
-- Ride ownership protection
-- Unauthorized ride cancellation
-- Fare calculation
-- Multiple-seat fare calculation
-- Invalid driver ride-state transitions
-- Pool capacity enforcement
-- Concurrent pool matching
-
-Current test result:
-
-```text
-Test Files: 3 passed
-Tests:      7 passed
-```
-
-Run tests:
-
-```bash
-cd backend
-npm test
-```
-
-Build the backend:
-
-```bash
-npm run build
-```
-
-## Local Backend Setup
-
-### Requirements
+### Backend
 
 - Node.js
+- Express.js
+- TypeScript
+- Prisma ORM
+
+### Database
+
 - PostgreSQL
-- npm
 
-### Install Dependencies
+### Testing
 
-```bash
-cd backend
-npm install
-```
+- Vitest
 
-### Environment
+### Containerization
 
-Create a `.env` file based on the project's environment configuration.
+- Docker
+- Docker Compose
 
-Example:
-
-```env
-PORT=5000
-NODE_ENV=development
-DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/dhaka_tesla_pool
-JWT_SECRET=your-development-secret
-```
-
-Do not commit real secrets to Git.
-
-### Generate Prisma Client
-
-```bash
-npm run prisma:generate
-```
-
-### Run Migrations
-
-```bash
-npm run prisma:migrate
-```
-
-### Seed Demo Data
-
-```bash
-npx prisma db seed
-```
-
-The seed creates:
-
-- Jashim — Driver
-- Bullet — Tesla Model 3
-- Nusrat — Passenger
-- Rafiq — Passenger
-- Shirin — Passenger
-
-The demo password for the seeded accounts is:
-
-```text
-12345678
-```
-
-### Start Development Server
-
-```bash
-npm run dev
-```
-
-The API runs on:
-
-```text
-http://localhost:5000
-```
-
-Health check:
-
-```text
-GET /api/health
-```
-
-## Demo Flow
-
-The backend can demonstrate the required pooling scenario using the seeded users.
-
-Example:
-
-```text
-Jashim
-  └── Bullet
-      └── Capacity: 3
-
-Nusrat
-  └── Banani → Mohakhali
-      └── 1 seat
-
-Rafiq
-  └── Banani → Gulshan
-      └── 1 seat
-```
-
-Both rides can be matched into the same pool:
-
-```text
-Bullet Pool
-├── Nusrat — 1 seat — fare 88
-└── Rafiq  — 1 seat — fare 88
-
-Occupied: 2 / 3
-Remaining: 1
-```
-
-This demonstrates:
-
-- Overlapping but non-identical trips
-- Pool membership
-- Individual passenger fares
-- Pool discount
-- Capacity enforcement
+---
 
 ## Architecture
 
-Current backend architecture follows a simple layered structure:
+The project follows a simple frontend/backend architecture:
 
 ```text
-Client
-  ↓
+React Frontend
+      |
+      | HTTP / JSON
+      ↓
+Express + TypeScript Backend
+      |
+      | Prisma
+      ↓
+PostgreSQL
+```
+
+The backend is organized into:
+
+```text
 Routes
   ↓
 Controllers
   ↓
 Services
   ↓
-Prisma ORM
+Prisma
   ↓
 PostgreSQL
 ```
 
-Business rules such as matching, capacity checks, fare calculation, ownership checks, and ride-state transitions are kept primarily inside the service layer rather than route handlers.
+Business logic such as ride creation, ride lifecycle changes, vehicle operations and pool matching is handled in service files.
 
-Architecture and ERD diagrams are maintained under:
+---
+
+## Database
+
+The main database entities are:
 
 ```text
-docs/
+User
+ ├── Passenger
+ └── Driver
+
+Driver
+ └── Vehicle
+
+RideRequest
+ └── PoolMember
+       └── Pool
+
+RideRequest
+ └── RideStatusHistory
+
+RideRequest
+ └── Fare
 ```
 
-## AI Usage
+The project contains database documentation and an ERD in the `docs` directory.
 
-AI tools may be used during development for:
+- `docs/architecture.md`
+- `docs/database.md`
+- `docs/erd.md`
 
-- Debugging
-- Code review
-- Test generation
-- Documentation assistance
-- Identifying edge cases
+---
 
-All generated code is reviewed, tested, and adapted before being included in the project.
+## Project Structure
 
-AI is not used as a replacement for application-level validation, database constraints, or business-logic testing.
+```text
+dhaka-tesla-pool/
+│
+├── backend/
+│   ├── prisma/
+│   │   ├── migrations/
+│   │   ├── schema.prisma
+│   │   └── seed.ts
+│   │
+│   ├── src/
+│   │   ├── config/
+│   │   ├── controllers/
+│   │   ├── lib/
+│   │   ├── middlewares/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── types/
+│   │   ├── app.ts
+│   │   ├── server.ts
+│   │   └── test-db.ts
+│   │
+│   ├── .env.example
+│   ├── Dockerfile
+│   └── package.json
+│
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── App.css
+│   │   ├── index.css
+│   │   └── main.jsx
+│   └── package.json
+│
+├── docs/
+│   ├── architecture.md
+│   ├── database.md
+│   └── erd.md
+│
+├── docker-compose.yml
+├── README.md
+└── .gitignore
+```
 
-## MVP Scope
+---
 
-### Included
+## Backend API
 
-- Authentication
-- Passenger ride requests
-- Driver availability
-- Vehicle capacity
-- Ride matching
-- Compatible route pooling
-- Pool membership
-- Fare calculation
-- Pool discounts
-- Ride lifecycle
-- Cancellation
+The implemented backend includes the following main endpoints.
+
+### Authentication
+
+```text
+POST /api/auth/register
+POST /api/auth/login
+```
+
+### Rides
+
+```text
+POST /api/rides
+GET /api/rides
+GET /api/rides/:id
+POST /api/rides/:id/cancel
+```
+
+### Driver
+
+```text
+GET /api/drivers/requests
+GET /api/drivers/rides
+
+POST /api/drivers/rides/:rideId/accept
+POST /api/drivers/rides/:rideId/arrive
+POST /api/drivers/rides/:rideId/start
+POST /api/drivers/rides/:rideId/complete
+```
+
+### Vehicles
+
+```text
+GET /api/vehicles/me
+POST /api/vehicles
+PATCH /api/vehicles/me/status
+```
+
+### Pools
+
+```text
+POST /api/pools/rides/:rideId/match
+```
+
+### Health
+
+```text
+GET /
+GET /api/health
+```
+
+---
+
+## Local Setup
+
+### Prerequisites
+
+Install:
+
+- Node.js
+- PostgreSQL
+- Git
+
+Clone the repository:
+
+```bash
+git clone https://github.com/azmain-arnob/dhaka-tesla-pool.git
+cd dhaka-tesla-pool
+```
+
+---
+
+## Backend Setup
+
+Go to the backend:
+
+```bash
+cd backend
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create the environment file:
+
+```text
+.env
+```
+
+Use `.env.example` as the reference.
+
+Example:
+
+```env
+PORT=5000
+NODE_ENV=development
+DATABASE_URL="postgresql://postgres:password@localhost:5432/dhaka_tesla_pool"
+```
+
+Generate Prisma client:
+
+```bash
+npm run prisma:generate
+```
+
+Run database migrations:
+
+```bash
+npm run prisma:migrate
+```
+
+Seed the database:
+
+```bash
+npm run prisma:seed
+```
+
+Start the backend:
+
+```bash
+npm run dev
+```
+
+The backend runs on:
+
+```text
+http://localhost:5000
+```
+
+---
+
+## Frontend Setup
+
+Open another terminal:
+
+```bash
+cd frontend
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the frontend:
+
+```bash
+npm run dev
+```
+
+Vite will provide the local frontend URL in the terminal.
+
+---
+
+## Docker Setup
+
+The project also includes Docker Compose for running the backend and PostgreSQL together.
+
+From the project root:
+
+```bash
+docker compose up --build
+```
+
+The backend container runs in production mode and connects to the PostgreSQL container.
+
+To stop the containers:
+
+```bash
+docker compose down
+```
+
+The Docker setup has been tested locally with:
+
+```text
+PostgreSQL
+Backend
+Prisma migrations
+Health/API endpoint
+```
+
+---
+
+## Database Seed
+
+The seed data includes example users, drivers and vehicles such as:
+
+```text
+Jashim
+Bullet
+Nusrat
+Rafiq
+Shirin
+```
+
+The seed is intended for local development and testing.
+
+---
+
+## Testing
+
+Backend tests are written using Vitest.
+
+Run:
+
+```bash
+npm test
+```
+
+Current test result:
+
+```text
+Test Files  3 passed
+Tests       8 passed
+```
+
+The tests cover service-level behavior including:
+
+- Ride operations
+- Driver operations
+- Pool matching
+- Pool capacity
+- Pooled fares
+- Concurrency-related pool matching behavior
+
+---
+
+## Build Verification
+
+Backend build:
+
+```bash
+npm run build
+```
+
+Frontend build:
+
+```bash
+npm run build
+```
+
+Both builds have been tested successfully.
+
+---
+
+## Manual Testing
+
+The main application flow has also been tested manually.
+
+Tested flow:
+
+```text
+Passenger Registration
+        ↓
+Passenger Login
+        ↓
+Create Ride
+        ↓
+Driver Login
+        ↓
+View Ride Request
+        ↓
+Match Pool
+        ↓
+Driver Arrives
+        ↓
+Start Ride
+        ↓
+Complete Ride
+        ↓
+Passenger Sees Completed Ride
+```
+
+Multiple passenger requests were also tested with the same Tesla.
+
+Capacity protection was tested by filling a Tesla and then attempting another match.
+
+---
+
+## Authentication
+
+The backend contains authentication and role-based access for the main passenger and driver flows.
+
+The application separates passenger and driver functionality in the frontend.
+
+Drivers can access driver-specific operations such as:
+
+- Ride requests
+- Matching
+- Vehicle status
+- Assigned rides
+- Ride lifecycle actions
+
+Passengers can access passenger-specific operations such as:
+
+- Ride creation
 - Ride history
-- Authorization
-- Capacity/concurrency protection
-- Automated tests
+- Ride cancellation
 
-### Not Yet Included
+---
 
-- Real map routing
-- Real-time GPS tracking
-- Payment gateway
-- Production-scale distributed matching
-- Advanced route optimization
-- Final frontend
-- Production deployment
+## Concurrency Handling
+
+Pool matching is one of the important consistency-sensitive parts of the project.
+
+The current implementation uses:
+
+- Database transactions
+- Serializable transaction isolation
+- Row locking
+- Capacity re-checking inside the transaction
+
+This is intended to protect against cases where two ride requests try to consume the same remaining vehicle capacity.
+
+The current implementation is designed for the MVP and local/small-scale deployment. A larger production system would require additional infrastructure and more extensive concurrency/load testing.
+
+---
 
 ## Git Workflow
 
-Development uses feature branches rather than directly committing all changes to `master`.
+The project uses separate branches for development and release work.
 
-Current development branch:
+Main branches:
 
 ```text
 master
-  └── feature/backend-setup
+pre-release
+release/v1.0.0
 ```
 
-Meaningful incremental commits are preferred over one large initial implementation.
+Feature work was developed through feature branches before being merged.
+
+The `v1.0.0` release was created after the MVP implementation and testing work.
+
+---
+
+## Development Process
+
+The project was developed incrementally rather than building everything at once.
+
+The main development stages included:
+
+```text
+Project Setup
+      ↓
+Backend Structure
+      ↓
+Database + Prisma
+      ↓
+Authentication
+      ↓
+Vehicle Module
+      ↓
+Ride Module
+      ↓
+Pool Module
+      ↓
+Capacity Protection
+      ↓
+Driver Lifecycle
+      ↓
+Frontend
+      ↓
+Testing
+      ↓
+Docker
+      ↓
+Release v1.0.0
+```
+
+---
+
+## AI Usage
+
+AI tools were used heavily during development.
+
+I did not write every part of the project manually.
+
+For many parts of the implementation, my workflow was essentially:
+
+```text
+Ask AI
+   ↓
+Copy suggested code
+   ↓
+Paste into project
+   ↓
+Run the code
+   ↓
+See errors / unexpected behavior
+   ↓
+Report the problem to AI
+   ↓
+Apply the fix
+   ↓
+Run tests / manual testing
+```
+
+AI was used for things including:
+
+- Backend code
+- Frontend code
+- Prisma/database work
+- API implementation
+- Tests
+- Docker configuration
+- Debugging
+- Git commands
+- Documentation
+- README preparation
+
+I also personally ran and checked the application during development, including:
+
+- Backend API
+- Frontend UI
+- Database
+- Prisma Studio
+- Automated tests
+- Production build
+- Docker Compose
+- Ride lifecycle
+- Pool matching
+- Capacity protection
+
+So this project should not be presented as completely handwritten code. AI-assisted development was a significant part of the process.
+
+---
+
+## Limitations
+
+This is an MVP project and is not intended to represent a production-scale ride-sharing platform.
+
+Current limitations include:
+
+- No real payment gateway
+- No real-time GPS tracking
+- No live map-based route matching
+- No production deployment yet
+- No advanced route optimization
+- No large-scale load testing
+- No distributed concurrency infrastructure
+- Fare calculation uses predefined zones
+- The current matching logic is intentionally simple
+- UI is focused on functionality rather than production-level visual polish
+
+---
+
+## Future Improvements
+
+Possible future improvements include:
+
+- Real map and route integration
+- Better route-overlap matching
+- Real-time driver location
+- Real-time ride updates
+- Payment integration
+- More advanced fare calculation
+- Better passenger and driver dashboards
+- More comprehensive integration tests
+- Load and stress testing
+- Production deployment
+- Improved authentication/security
+- Better concurrency handling for large-scale deployment
+
+---
+
+## Repository
+
+GitHub:
+
+```text
+https://github.com/azmain-arnob/dhaka-tesla-pool
+```
+
+---
+
+## Release
+
+Current release:
+
+```text
+v1.0.0
+```
+
+Release branch:
+
+```text
+release/v1.0.0
+```
+
+---
 
 ## License
 
-MIT
+This project was developed as an software engineering project.
